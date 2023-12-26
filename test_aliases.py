@@ -6,9 +6,10 @@ import re
 from http import HTTPStatus
 from os import path
 from pathlib import Path
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError
 
-def check_refs_file(file, dir, out):
+
+def check_refs_file(file, dir, out, verbose=False):
     last = os.getcwd()
     os.chdir(dir)
     sample = os.getcwd()
@@ -18,8 +19,8 @@ def check_refs_file(file, dir, out):
 
         if ref.startswith('http'):
             if not check_web_ref(ref):
-                text = "\033[31m{}".format(f'{sample + os.sep + file}: Failure')
-                print(text, ref, file = out)
+                text = f'{sample + os.sep + file}: Failure'
+                print(text, ref, file=out)
 
                 ok_flag = False
         else:
@@ -30,28 +31,28 @@ def check_refs_file(file, dir, out):
                     continue
 
             if not path.exists(ref):
-                text = "\033[31m{}".format(f'{sample + os.sep + file}, {ref} : Failure')
-                print(text, file = out)
+                text = f'{sample + os.sep + file}, {ref} : Failure'
+                print(text, file=out)
                 ok_flag = False
-    if ok_flag:
-        text = "\033[32m{}".format(f"{sample + os.sep + file}: Success")
-        print(text, file = out)
+    if ok_flag and verbose:
+        text = f"{sample + os.sep + file}: Success"
+        print(text, file=out)
     os.chdir(last)
 
 
-def check_all_refs(root_dir, out):
+def check_all_refs(root_dir, out, verbose=False):
     all_dirs = os.walk(root_dir)
     for sample in all_dirs:
         files_dir = sample[2]
         files_dir = list(filter(lambda file: Path(file).suffix == '.md', files_dir))
         for file in files_dir:
-            check_refs_file(file, sample[0], out)
+            check_refs_file(file, sample[0], out, verbose)
     print("All refs checked", file=out)
 
 
 def get_refs(file):
     refs = None
-    with open(file,'r', buffering=True, encoding='utf-8') as content:
+    with open(file, 'r', buffering=True, encoding='utf-8') as content:
         text = content.read()
         regex_refs = re.compile(r'\]\(|img .*src=\"')
         refs = regex_refs.finditer(text)
@@ -65,22 +66,24 @@ def get_refs(file):
         raw_ref = ref.group()
 
         if raw_ref[0] == ']':
-            start_ref = ref.end() + 1 # Будем резать от скобки до ближайшей правой скобки
+            start_ref = ref.end() + 1  # Будем резать от скобки до ближайшей правой скобки
             end_ref = text.find(')', start_ref)
-            clear_refs.append(text[start_ref - 1 :end_ref])
+            clear_refs.append(text[start_ref - 1:end_ref])
         elif raw_ref[0] == 'i':
-            start_ref = ref.end()+1 # В конце регвыра всегда будет кавычка
-            end_ref = text.find(r'"', start_ref) # Будем резать до ближайшей кавычки правой
-            clear_refs.append(text[start_ref-1:end_ref])
+            start_ref = ref.end() + 1  # В конце регвыра всегда будет кавычка
+            end_ref = text.find(r'"', start_ref)  # Будем резать до ближайшей кавычки правой
+            clear_refs.append(text[start_ref - 1:end_ref])
         else:
-            print("Что-то с ссылкой")
+            print(f'Что-то с ссылкой: {raw_ref}')
 
     return iter(clear_refs)
+
 
 def check_refs_yaml(file_yaml, out):
     count_rows = 1
     dir_idx = file_yaml.rfind('/')
     file = file_yaml
+
     if dir_idx != -1:
         cur_dir = os.getcwd()
         dir = file_yaml[:dir_idx]
@@ -96,24 +99,25 @@ def check_refs_yaml(file_yaml, out):
             if len(ref_file) == 0:
                 continue
 
-
             if not os.path.exists(ref_file):
                 print(f'No such file: {ref_file}', f'row = {count_rows}', file=out)
 
-    os.chdir(cur_dir)
+    if dir_idx != -1:
+        os.chdir(cur_dir)
+
 
 def check_web_ref(ref):
-    header = {'User-Agent':"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36",
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-              'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
-              'Accept-Encoding': 'none',
-              'Accept-Language': 'en-US,en;q=0.8',
-              'Connection': 'keep-alive'}
+    header = {
+        'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36",
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
+        'Accept-Encoding': 'none',
+        'Accept-Language': 'en-US,en;q=0.8',
+        'Connection': 'keep-alive'}
 
     request = urllib.request.Request(ref, headers=header)
 
     # Эти сайты содержат капчу, которую не представляется возможным обойти
-
 
     try:
         resp = urllib.request.urlopen(request)
@@ -125,11 +129,10 @@ def check_web_ref(ref):
     except BaseException:
         resp_code = HTTPStatus.NOT_FOUND
 
-    return resp_code==HTTPStatus.OK
+    return resp_code == HTTPStatus.OK
 
 
-
-def check_aliases(file_yaml, version, out):
+def check_aliases(file_yaml, version, out, verbose=False):
     url = f'https://docs.ideco.dev/v/{version}/'
     excepts = ['structure', 'readme', 'summary', 'redirects']
     regex__alias = re.compile(r'([a-z].*):')
@@ -150,18 +153,17 @@ def check_aliases(file_yaml, version, out):
                 if alias in excepts:
                     continue
 
-                if check_web_ref(url+alias):
-                    text = f'{alias}: Success'
-                    print("\033[32m{}".format(text), file = out)
+                if check_web_ref(url + alias):
+                    if verbose:
+                        text = f'{alias}: Success'
+                        print(text, file=out)
                 else:
                     text = f'{alias}: Failure'
-                    print("\033[31m{}".format(text), file = out)
+                    print(text, file=out)
 
             else:
-                print(f'row:{count_rows}, {line}', file = out)
+                print(f'row:{count_rows}, {line}', file=out)
                 raise Exception(alias_obj)
-
-
 
 
 # -cr - check refs -ca-check aliases
@@ -170,13 +172,14 @@ def main():
     description_text = "Help check-aliases and refs_aliases"
     help_text = description_text + "\n" + 'For checking refs - -cr, --check_refs' + "\n" + 'For checking aliases - -ca, --check_aliases'
 
-    parser = argparse.ArgumentParser(add_help=True, description=help_text, epilog="DocHelperScripts",)
+    parser = argparse.ArgumentParser(add_help=True, description=help_text, epilog="DocHelperScripts", )
 
     parser.add_argument('-cr', '--check_refs', action='store_true')
     parser.add_argument('-ca', '--check_aliases', action='store_true')
     parser.add_argument('-C', '--check_all_refs', action='store_true')
     parser.add_argument('-D', '--directory', action='store_true')
     parser.add_argument('-f', '--file', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
     args, unknown = parser.parse_known_args()
 
     out_file = sys.stdout
@@ -199,9 +202,9 @@ def main():
 
         rslash = args.file_with_refs.find('/')
         sample = args.file_with_refs[:rslash]
-        args.file_with_refs = args.file_with_refs[rslash+1:]
+        args.file_with_refs = args.file_with_refs[rslash + 1:]
 
-        check_refs_file(args.file_with_refs, sample, out_file)
+        check_refs_file(args.file_with_refs, sample, out_file, args.verbose)
     if args.check_aliases:
         parser.add_argument('file_yaml', type=str, help='file with aliases in current directory', default=None)
         parser.add_argument('version_doc', type=str, help='Version of documentation')
@@ -212,7 +215,7 @@ def main():
             sys.exit(-1)
 
         check_refs_yaml(args.file_yaml, out_file)
-        check_aliases(args.file_yaml, args.version_doc, out_file)
+        check_aliases(args.file_yaml, args.version_doc, out_file, args.verbose)
     if args.check_all_refs:
         parser.add_argument('start_dir', type=str, help='Starting directory for checking all refs', default=os.getcwd())
         args, unknown = parser.parse_known_args()
