@@ -7,7 +7,7 @@ from WebWorker import WebWorker
 
 
 class CheckRefsWorker:
-    def __init__(self, directory=os.getcwd(), verbose=False, out_stream=sys.stdout):
+    def __init__(self, directory, verbose, out_stream=sys.stdout):
         self.verbose = verbose
         if self.check_dir(directory):
             self.directory = directory
@@ -128,7 +128,7 @@ class CheckRefsWorker:
         for ref in CheckRefsWorker.get_refs(file):
             if ref.startswith('http'):
                 if not WebWorker.check_ref(ref) or WebWorker.check_ref_forbidden(ref):
-                    text = f'{last + os.sep + file}: Failure'
+                    text = f'{os.path.relpath(last, self.directory) + os.sep + file}: Failure'
                     print(text, ref, file=self.out)
                     ok_flag = False
             else:
@@ -139,11 +139,11 @@ class CheckRefsWorker:
                         continue
 
                 if not os.path.exists(ref):
-                    text = f'{last + os.sep + file}, {ref} : Failure'
+                    text = f'{os.path.relpath(last, self.directory) + os.sep + file}, {ref} : Failure'
                     print(text, file=self.out)
                     ok_flag = False
 
         if ok_flag and self.verbose:
-            text = f"{last + os.sep + file}: Success"
+            text = f"{os.path.relpath(last, self.directory) + os.sep + file}: Success"
             print(text, file=self.out)
         os.chdir(last)
